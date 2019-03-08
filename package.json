@@ -1,0 +1,25 @@
+{
+  "name": "ipfs-stress-test",
+  "version": "1.0.0",
+  "description": "Stress test IPFS",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "big-integer": "^1.6.36",
+    "form-data": "^2.3.3",
+    "node-fetch": "^2.2.0",
+    "qs": "^6.5.2",
+    "stream-json": "^1.1.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dn3010/ipfs-stress-test.git"
+  },
+  "author": "",
+  "license": "ISC"
+}

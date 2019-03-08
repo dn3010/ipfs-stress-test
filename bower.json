@@ -1,0 +1,25 @@
+{
+  "name": "ipfs-stress-test",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "authors": [
+    "Rohit Grover <rohit@sylo.io>"
+  ],
+  "description": "A suite of tests to stress performance of IPFS",
+  "dependencies": {
+    "purescript-prelude": "^4.1.0",
+    "purescript-console": "^4.2.0",
+    "purescript-effect": "^2.0.1",
+    "purescript-ipfs-api": "git@github.com:dn3010/purescript-ipfs-api.git#master",
+    "purescript-debug": "^4.0.0",
+    "purescript-spec": "^3.1.0",
+    "purescript-transformers": "^4.2.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0"
+  }
+}
