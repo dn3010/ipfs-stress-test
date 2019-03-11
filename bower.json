@@ -17,7 +17,8 @@
     "purescript-ipfs-api": "git@github.com:dn3010/purescript-ipfs-api.git#master",
     "purescript-debug": "^4.0.0",
     "purescript-spec": "^3.1.0",
-    "purescript-transformers": "^4.2.0"
+    "purescript-transformers": "^4.2.0",
+    "purescript-strings": "^4.0.1"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"
