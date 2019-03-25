@@ -18,7 +18,19 @@
     "purescript-debug": "^4.0.0",
     "purescript-spec": "^3.1.0",
     "purescript-transformers": "^4.2.0",
-    "purescript-strings": "^4.0.1"
+    "purescript-strings": "^4.0.1",
+    "purescript-quickcheck": "^6.1.0",
+    "purescript-refs": "^4.1.0",
+    "purescript-unicode": "^4.0.1",
+    "purescript-numbers": "^6.0.0",
+    "purescript-node-process": "^7.0.0",
+    "purescript-assert": "^4.1.0",
+    "purescript-uuid": "^5.2.2",
+    "purescript-ordered-collections": "^1.6.0",
+    "purescript-stringutils": "^0.0.8",
+    "purescript-lists": "^5.4.0",
+    "purescript-lazy": "^4.0.0",
+    "purescript-nonempty": "^5.0.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"

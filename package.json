@@ -11,7 +11,9 @@
     "form-data": "^2.3.3",
     "node-fetch": "^2.2.0",
     "qs": "^6.5.2",
-    "stream-json": "^1.1.1"
+    "stream-json": "^1.1.1",
+    "uuid": "^3.3.2",
+    "uuid-validate": "0.0.3"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
