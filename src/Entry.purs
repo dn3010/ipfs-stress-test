@@ -111,13 +111,3 @@ arbitraryEntry links =
        , d: "{msg: " <> show msg <> ", sender: " <> show sender
              <> ", priority: " <> show pri <> "}"
        }
-
--- TODO: remove the following if not used
-{---- | Adapts array of (Hashed k v) to arbitraryEntry taking LinkOjects--}
-{--arbitraryEntry' :: Array (Hashed (Base58Encoded Multihash) E) -> Gen E--}
-{--arbitraryEntry' hashLinks =--}
-  {--let--}
-    {--linkObjects =--}
-      {--hashLinks <#> \(Hashed hlink) ->--}
-        {--{name: "parent", hash: hlink.hash, size: hlink.size}--}
-  {--in arbitraryEntry linkObjects--}
