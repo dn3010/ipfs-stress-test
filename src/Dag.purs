@@ -86,25 +86,31 @@ createArbitraryDAGWithDepth
   -> Int
   -> IpfsGenContext DAG
 createArbitraryDAGWithDepth _freqs 0 = do
-  {ipfs, refGenState} <- ask
-  genState            <- liftEffect $ read refGenState
+  {refGenState, ipfsDestChooser} <- ask
+  genState <- liftEffect $ read refGenState
+  let
+    ipfs /\ genState' =
+      runGen ipfsDestChooser genState
+  liftEffect $ write genState' refGenState -- update generator state
   DAG <<< (_ :| []) <$> addIpfsObject ipfs refGenState [{- no parents -}]
 
 createArbitraryDAGWithDepth f d = do
-  {ipfs, refGenState} <- ask
+  {refGenState, ipfsDestChooser} <- ask
   genState <- liftEffect $ read refGenState
 
   -- Each of the following generators will produce an arbitrary DAG
   -- represented as an Array of entries. It is guaranteed that the
   -- first element of each Array is the root of the DAG
   let
+    ipfs /\ genState' =
+      runGen ipfsDestChooser genState
     extensionGen =
       frequency $
         (f.linear /\ (pure Linear)) :|
           Cons (f.diamond /\ (pure Diamond)) (Cons (f.fork /\ (pure Fork)) Nil)
-    extensionChoice /\ genState' =
+    extensionChoice /\ genState'' =
       runGen extensionGen genState
-  liftEffect $ write genState' refGenState -- update generator state
+  liftEffect $ write genState'' refGenState -- update generator state
   case extensionChoice of
     Linear -> do
       -- extend base subtree with a single new root (forming a chain)
@@ -159,17 +165,19 @@ concurrentlyAccessArbitraryObjects
   -> Array (Tuple LinkObject E)
   -> IpfsGenContext Int
 concurrentlyAccessArbitraryObjects maxObjectsToAccess pairs = do
-  {ipfs, refGenState} <- ask
-  genState            <- liftEffect $ read refGenState
+  {ipfsDestChooser, refGenState} <- ask
+  genState <- liftEffect $ read refGenState
 
   let
     shuffledPairs /\ genState' =
       runGen (shuffle pairs) genState
+    ipfs /\ genState'' =
+      runGen ipfsDestChooser genState'
     objs =
       A.take maxObjectsToAccess shuffledPairs
     nAccessed =
       A.length objs
-  liftEffect $ write genState' refGenState
+  liftEffect $ write genState'' refGenState
 
   parTraverse_ <@> objs $ \({hash} /\ (E e)) -> do
     stat <- liftAff $ runNoLoggingT $ expectRight =<< runExceptT do

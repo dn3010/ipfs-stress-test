@@ -40,6 +40,7 @@ import Entry (E, arbitraryEntry)
 import IPFSLog.EntryStore.Class (createEntry, getEntry) as EntryStore
 import IPFSLog.Hashed (Hashed(..))
 import IPFSLog.Store.IPFSEntryStore (IPFSEntryStore, mkIPFSEntryStore)
+import Ipfs.Api.Client (Client) as Ipfs.Api.Client
 import Ipfs.Api.Commands.Object.Internal (LinkObject)
 import Ipfs.Api.Commands.PubSub.Pub (run) as Ipfs.Api.Commands.PubSub.Pub
 import Ipfs.Api.Commands.PubSub.Sub (mkArgs, run) as Ipfs.Api.Commands.PubSub.Sub
@@ -73,6 +74,7 @@ type LogInfo
 newtype Agent =
   Agent
     { agentId  :: UUID
+    , ipfs     :: Ipfs.Api.Client.Client
     , logInfos :: Map UUID LogInfo
     }
 
@@ -100,7 +102,7 @@ createArbitraryAgents
   -> Int
   -> IpfsGenContext (Array Agent)
 createArbitraryAgents (logMetadata) numAgents logsPerAgent = do
-  {ipfs, refGenState} <- ask
+  {refGenState, ipfsDestChooser} <- ask
   for (range 1 numAgents) $ \_ -> do
     agentId <- liftEffect genUUID
 
@@ -108,8 +110,10 @@ createArbitraryAgents (logMetadata) numAgents logsPerAgent = do
     -- log-specific state
     genState <- liftEffect $ read refGenState
     let
-      shuffledLogs /\ genState' =
-        runGen (shuffle logMetadata.logs) genState
+      ipfs /\ genState' =
+        runGen ipfsDestChooser genState
+      shuffledLogs /\ genState'' =
+        runGen (shuffle logMetadata.logs) genState'
       logInfoTuples =
         A.take logsPerAgent shuffledLogs <#> \log ->
           let
@@ -120,18 +124,19 @@ createArbitraryAgents (logMetadata) numAgents logsPerAgent = do
           in log.logId /\ {heads, entryStore}
       logInfos =
         fromFoldable logInfoTuples
-    liftEffect $ write genState' refGenState -- update generator state
+    liftEffect $ write genState'' refGenState -- update generator state
 
-    pure $ Agent {agentId, logInfos}
+    pure $ Agent {agentId, ipfs, logInfos}
 
 subscribeAgentsToGroupTopics
   :: Array (Ref Agent)
   -> IpfsGenContext Unit
 subscribeAgentsToGroupTopics agentRefs = do
-  {ipfs} <- ask
+  {refGenState, ipfsDestChooser} <- ask
   parTraverse_ <@> agentRefs $ \refAgentState -> do
-    agentId /\ logUUIDs <- liftEffect $
-      (\(Agent a) -> a.agentId /\ keys a.logInfos) <$> Ref.read refAgentState
+    agentId /\ ipfs /\ logUUIDs <- liftEffect $
+      (\(Agent a) -> a.agentId /\ a.ipfs /\ keys a.logInfos) <$>
+        Ref.read refAgentState
     parTraverse_ <@> logUUIDs $ \logUUID -> do
       let
         pubsubTopic =
@@ -179,7 +184,7 @@ generateAgentMessages
   :: Array (Ref Agent)
   -> IpfsGenContext Unit
 generateAgentMessages agentRefs = do
-  {ipfs, refGenState, delayGenerator} <- ask
+  {refGenState, delayChooser} <- ask
   parTraverse_ <@> agentRefs $ \refAgentState -> do
     logUUIDs <- liftEffect $
       (keys <<< (\(Agent a) -> a.logInfos)) <$> Ref.read refAgentState
@@ -195,7 +200,7 @@ generateAgentMessages agentRefs = do
             elements nonEmptyList
           logUUID /\ genState' = runGen logUUIDChooser genState
           delayMS /\ genState'' =
-            runGen delayGenerator genState'
+            runGen delayChooser genState'
         liftEffect $ write genState'' refGenState -- update generator state
         pure $ delayMS /\ logUUID
 
@@ -234,7 +239,7 @@ generateAgentMessages agentRefs = do
               dat <- liftEffect $ Buffer.fromString publishMsg UTF8
               Ipfs.Api.Commands.PubSub.Pub.run
                 { topic, datas: NE.singleton dat }
-                ipfs
+                agent.ipfs
 
     forever $ do
       delayMS /\ logUUID <- pickParameters

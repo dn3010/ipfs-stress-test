@@ -7,6 +7,7 @@ import Control.Monad.Fork.Class (fork)
 import Control.Monad.MonadLogging (runStdoutLoggingT)
 import Control.Monad.Reader.Trans (runReaderT)
 import Data.Maybe (Maybe(..))
+import Data.NonEmpty (NonEmpty, (:|))
 import Data.Traversable (traverse)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
@@ -16,17 +17,25 @@ import Effect.Ref (new) as Ref
 import Ipfs.Api.Client (Client(..)) as Ipfs.Api.Client
 import LogMetadata (createArbitraryLogs)
 import Random.LCG (randomSeed)
-import Test.QuickCheck.Gen (choose)
+import Test.QuickCheck.Gen (choose, elements)
 
 main :: Effect Unit
 main = do
   let
-    ipfs :: Ipfs.Api.Client.Client
-    ipfs =
+    ipfsDestinations :: NonEmpty Array Ipfs.Api.Client.Client
+    ipfsDestinations =
       Ipfs.Api.Client.Client
-        { baseUrl: "https://ipfs-x2.sylo.io"
-        , modifyRequest: Nothing
-        }
+          { baseUrl: "https://ipfs-x2.sylo.io"
+          , modifyRequest: Nothing
+          }
+        :|
+        [ Ipfs.Api.Client.Client
+            { baseUrl: "https://ipfs-x3.sylo.io"
+            , modifyRequest: Nothing
+            }
+        ]
+    ipfsDestChooser =
+      elements ipfsDestinations
     dagShape = {linear: 0.40, diamond: 0.35, fork: 0.25}
 
   refGenState <- do
@@ -45,11 +54,11 @@ main = do
       100
     logsPerAgent =
       10
-    delayGenerator =
+    delayChooser =
       choose 2000.0 4000.0
   launchAff_ $
     runStdoutLoggingT (const identity) $ do
-      runReaderT <@> {ipfs, refGenState, delayGenerator} $ do
+      runReaderT <@> {refGenState, ipfsDestChooser, delayChooser} $ do
         logMetadata <- createArbitraryLogs dagShape numLogs initialLogDepth
         agents      <- createArbitraryAgents logMetadata numAgents logsPerAgent
 

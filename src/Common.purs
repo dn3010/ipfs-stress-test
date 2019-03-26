@@ -22,9 +22,9 @@ import Unsafe.Coerce (unsafeCoerce)
 
 type IpfsGenContext a
   = ReaderT
-      { ipfs           :: Ipfs.Api.Client.Client
-      , refGenState    :: Ref GenState
-      , delayGenerator :: Gen Number
+      { refGenState     :: Ref GenState
+      , ipfsDestChooser :: Gen Ipfs.Api.Client.Client
+      , delayChooser    :: Gen Number
       }
       (LoggingT Aff)
       a
