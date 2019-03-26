@@ -92,7 +92,7 @@ arbitraryEntry links =
       ',' :| toCharArray ".;"
     messageGen = ado
       cap     <- toUpper <$> elements chars
-      letters <- vectorOf 16 $
+      letters <- vectorOf 40 $
         frequency $
           (0.80 /\ (elements chars))
             :| Cons (0.05 /\ (elements numbers))
@@ -101,11 +101,11 @@ arbitraryEntry links =
       in cap : snoc letters end
     senderGen = ado
       s <- elements $ "Sun" :| ["Moon", "Earth", "Mars", "Saturn", "Pluto"]
-      n <- chooseInt 1 20
+      n <- chooseInt 1 100
       in s <> show n
   in ado
     msg    <- String.CodeUnits.fromCharArray <$> messageGen
-    pri    <- chooseInt 0 5
+    pri    <- chooseInt 0 100
     sender <- senderGen
   in E { links
        , d: "{msg: " <> show msg <> ", sender: " <> show sender
