@@ -29,11 +29,7 @@ main = do
           , modifyRequest: Nothing
           }
         :|
-        [ Ipfs.Api.Client.Client
-            { baseUrl: "https://ipfs-x3.sylo.io"
-            , modifyRequest: Nothing
-            }
-        ]
+        []
     ipfsDestChooser =
       elements ipfsDestinations
     dagShape = {linear: 0.40, diamond: 0.35, fork: 0.25}
