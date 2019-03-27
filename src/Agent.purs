@@ -3,9 +3,11 @@ module Agent
   , createArbitraryAgents
   , subscribeAgentsToGroupTopics
   , generateAgentMessages
+  , LogID
+  , AgentID
   ) where
 
-import Common (IpfsGenContext, expectRight, shorten)
+import Common (IpfsGenContext, expectRight)
 import Control.Monad.Except.Trans (runExceptT)
 import Control.Monad.Gen (elements)
 import Control.Monad.MonadLogging (d) as L
@@ -30,7 +32,6 @@ import Data.Traversable (for)
 import Data.Tuple (Tuple)
 import Data.Tuple.Nested ((/\))
 import Data.UUID (UUID, emptyUUID, genUUID)
-import Debug.Trace (traceM)
 import Effect.Aff (apathize, delay, forkAff)
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
@@ -67,15 +68,21 @@ newtype DummyPayload
   = DummyPayload Void
 
 type LogInfo
-  = { heads      :: Array LinkObject
-    , entryStore :: IPFSEntryStore DummyLogID DummyClockID DummyPayload
+  = { heads :: Array LinkObject
     }
+
+type AgentID
+  = UUID
+
+type LogID
+  = UUID
 
 newtype Agent =
   Agent
-    { agentId  :: UUID
-    , ipfs     :: Ipfs.Api.Client.Client
-    , logInfos :: Map UUID LogInfo
+    { agentID    :: AgentID
+    , ipfsClient :: Ipfs.Api.Client.Client
+    , entryStore :: IPFSEntryStore DummyLogID DummyClockID DummyPayload
+    , logInfos   :: Map LogID LogInfo
     }
 
 instance showAgent :: Show Agent where
@@ -84,9 +91,8 @@ instance showAgent :: Show Agent where
       logInfos
         :: Array
              (Tuple
-               UUID
-               { heads      :: Array LinkObject
-               , entryStore :: IPFSEntryStore DummyLogID DummyClockID DummyPayload
+               LogID
+               { heads :: Array LinkObject
                }
              )
       logInfos =
@@ -94,7 +100,7 @@ instance showAgent :: Show Agent where
       showLogInfos =
         logInfos <#> (\(uuid /\ logInfo) ->
             "(log-uuid: " <> show uuid <> ", heads:" <> show logInfo.heads <> ") ")
-    in "agent-UUID: " <> show a.agentId <> ", " <> fromCharArray showLogInfos
+    in "agent-UUID: " <> show a.agentID <> ", " <> fromCharArray showLogInfos
 
 createArbitraryAgents
   :: LogMetadata
@@ -104,14 +110,16 @@ createArbitraryAgents
 createArbitraryAgents (logMetadata) numAgents logsPerAgent = do
   {refGenState, ipfsDestChooser} <- ask
   for (range 1 numAgents) $ \_ -> do
-    agentId <- liftEffect genUUID
+    agentID <- liftEffect genUUID
 
     -- determine the logs to which this agent subscribes; and create
     -- log-specific state
     genState <- liftEffect $ read refGenState
     let
-      ipfs /\ genState' =
+      ipfsClient /\ genState' =
         runGen ipfsDestChooser genState
+      entryStore =
+        mkIPFSEntryStore ipfsClient
       shuffledLogs /\ genState'' =
         runGen (shuffle logMetadata.logs) genState'
       logInfoTuples =
@@ -119,14 +127,12 @@ createArbitraryAgents (logMetadata) numAgents logsPerAgent = do
           let
             heads =
               [log.link]
-            entryStore =
-              mkIPFSEntryStore ipfs
-          in log.logId /\ {heads, entryStore}
+          in log.logId /\ {heads}
       logInfos =
         fromFoldable logInfoTuples
     liftEffect $ write genState'' refGenState -- update generator state
 
-    pure $ Agent {agentId, ipfs, logInfos}
+    pure $ Agent {agentID, ipfsClient, entryStore, logInfos}
 
 subscribeAgentsToGroupTopics
   :: Array (Ref Agent)
@@ -134,8 +140,8 @@ subscribeAgentsToGroupTopics
 subscribeAgentsToGroupTopics agentRefs = do
   {refGenState, ipfsDestChooser} <- ask
   parTraverse_ <@> agentRefs $ \refAgentState -> do
-    agentId /\ ipfs /\ logUUIDs <- liftEffect $
-      (\(Agent a) -> a.agentId /\ a.ipfs /\ keys a.logInfos) <$>
+    agentID /\ ipfsClient /\ logUUIDs <- liftEffect $
+      (\(Agent a) -> a.agentID /\ a.ipfsClient /\ keys a.logInfos) <$>
         Ref.read refAgentState
     parTraverse_ <@> logUUIDs $ \logUUID -> do
       let
@@ -152,7 +158,7 @@ subscribeAgentsToGroupTopics agentRefs = do
                     runNoLoggingT $
                       EntryStore.getEntry
                         received.newHead.hash
-                        logInfo.entryStore
+                        agent.entryStore
                   when (isJust maybeFetched) $ do
                     Agent agentState <- liftEffect $
                       Ref.read refAgentState
@@ -172,13 +178,13 @@ subscribeAgentsToGroupTopics agentRefs = do
                             Agent $ agentState {logInfos = logInfos'}
                         liftEffect $ Ref.write agentState' refAgentState
 
-      L.d $ "sub: agent-UUID: " <> show agentId <> " -> " <> show logUUID
+      L.d $ "sub: agent-UUID: " <> show agentID <> " -> " <> show logUUID
       lift $
         expectRight =<< runExceptT do
           Ipfs.Api.Commands.PubSub.Sub.run
             (Ipfs.Api.Commands.PubSub.Sub.mkArgs {topic: pubsubTopic})
             handleLogUpdateMessage
-            ipfs
+            ipfsClient
 
 generateAgentMessages
   :: Array (Ref Agent)
@@ -207,8 +213,8 @@ generateAgentMessages agentRefs = do
       -- helper to generate an arbitrary message for a particular log
       generateEntryAndPublish logUUID = do
         Agent agent <- liftEffect $ Ref.read refAgentState
-        traceM $ "agent " <> (shorten <<< show) agent.agentId <>
-          " adding entry to logUUID " <> (shorten <<< show) logUUID
+        {--traceM $ "agent " <> (shorten <<< show) agent.agentId <>--}
+          {--" adding entry to logUUID " <> (shorten <<< show) logUUID--}
 
         for_ (Map.lookup logUUID agent.logInfos) $ \logInfo -> do
           genState <- liftEffect $ read refGenState
@@ -220,7 +226,7 @@ generateAgentMessages agentRefs = do
           liftEffect $ write genState' refGenState -- update generator state
 
           Hashed newDAGEntry :: Hashed (Base58Encoded Multihash) E <-
-            lift $ EntryStore.createEntry newE logInfo.entryStore
+            lift $ EntryStore.createEntry newE agent.entryStore
 
           let
             topic =
@@ -239,7 +245,7 @@ generateAgentMessages agentRefs = do
               dat <- liftEffect $ Buffer.fromString publishMsg UTF8
               Ipfs.Api.Commands.PubSub.Pub.run
                 { topic, datas: NE.singleton dat }
-                agent.ipfs
+                agent.ipfsClient
 
     forever $ do
       delayMS /\ logUUID <- pickParameters
