@@ -30,7 +30,9 @@
     "purescript-stringutils": "^0.0.8",
     "purescript-lists": "^5.4.0",
     "purescript-lazy": "^4.0.0",
-    "purescript-nonempty": "^5.0.0"
+    "purescript-nonempty": "^5.0.0",
+    "purescript-now": "^4.0.0",
+    "purescript-foldable-traversable": "^4.1.1"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"

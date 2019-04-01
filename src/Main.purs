@@ -2,7 +2,7 @@ module Main where
 
 import Prelude hiding (join)
 
-import Agent (createArbitraryAgents, generateAgentMessages, subscribeAgentsToGroupTopics)
+import Agent (RefPubsubRecords, createArbitraryAgents, generateAgentMessages, log2AgentsLookupTable, subscribeAgentsToGroupTopics)
 import Control.Monad.Fork.Class (fork)
 import Control.Monad.MonadLogging (runStdoutLoggingT)
 import Control.Monad.Reader.Trans (runReaderT)
@@ -25,11 +25,19 @@ main = do
     ipfsDestinations :: NonEmpty Array Ipfs.Api.Client.Client
     ipfsDestinations =
       Ipfs.Api.Client.Client
-          { baseUrl: "https://ipfs-x2.sylo.io"
-          , modifyRequest: Nothing
-          }
+        { baseUrl: "https://sylo.mysinglesource.io"
+        , modifyRequest: Nothing
+        }
         :|
-        []
+        [ Ipfs.Api.Client.Client
+            { baseUrl: "https://ipfs-cluster1.sylo.io"
+            , modifyRequest: Nothing
+            }
+        , Ipfs.Api.Client.Client
+            { baseUrl: "https://ipfs-cluster2.sylo.io"
+            , modifyRequest: Nothing
+            }
+        ]
     ipfsDestChooser =
       elements ipfsDestinations
     dagShape = {linear: 0.40, diamond: 0.35, fork: 0.25}
@@ -45,13 +53,13 @@ main = do
     numLogs =
       200
     initialLogDepth =
-      6
+      2
     numAgents =
       100
     logsPerAgent =
       10
     delayChooser =
-      choose 2000.0 4000.0
+      choose 2000.0 3000.0
   launchAff_ $
     runStdoutLoggingT (const identity) $ do
       runReaderT <@> {refGenState, ipfsDestChooser, delayChooser} $ do
@@ -59,5 +67,10 @@ main = do
         agents      <- createArbitraryAgents logMetadata numAgents logsPerAgent
 
         refAgents <- liftEffect $ traverse Ref.new agents
-        void $ fork $ subscribeAgentsToGroupTopics refAgents
-        generateAgentMessages refAgents
+        refPubsub :: RefPubsubRecords <- liftEffect $ Ref.new []
+
+        void $ fork $ subscribeAgentsToGroupTopics refAgents refPubsub
+        generateAgentMessages
+          refAgents
+          refPubsub
+          (log2AgentsLookupTable agents)
